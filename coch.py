@@ -3,9 +3,7 @@ from tkinter import filedialog as fd
 from datetime import timedelta
 import tkinter as tk
 import tkinter.messagebox
-# import numpy as np
-
-
+import numpy as np
 
 
 def open_file():
@@ -119,11 +117,18 @@ def name_shifts(df):
 
 
 def format_time(time):
-    """Formats times which have been stored as inappropriate integers to a consistent string (e.g. "15.42")
-    *Not a very clean method and can likely be improved"""
+    """Formats times which have been stored as short numbers to a consistent string with leading and
+    trailing zeros *Slightly messy method which will fail in may situations and can certainly be imrpoved
+
+    >>> format_time(5.3)
+    '05.30'
+
+    >>> format_time(8)
+    '08.00'
+    """
 
     n = 2
-    time = str(time)
+    time = str(float(time))
     new_time = "Error"
     for letter in time:
         if letter == ".":
@@ -169,23 +174,28 @@ def calculate_shifts(df):
 
     # Calculate shift lengths
     df["Shift Length"] = df["End DT"] - df["Start DT"]
-    print(df["Shift Length"])
+    df["Shift Hours"] = df["Shift Length"] / np.timedelta64(1, 'h')
 
     return df
 
 
 def show_only_shifts(df):
+    """Deprecated dataframe.append method still works but swapped for new version below"""
     df1 = pd.DataFrame()
     for i in range(len(df)):
         if df.loc[i, "Shift Length"] != 0:
             df1 = df1.append(df.loc[i])
-    # df2 = df1.drop("Date", "Start", "End", "Start Date", "End Date")
-    df2 = df1[["Start DT", "End DT", "Shift Length", "Comment"]]
-    return df2
+    return df1
+
+
+def show_only_shifts_new(df):
+    df1 = df[(df["Start"] != df["End"])].copy()
+    return df1
 
 
 def calendar_format(df):
-    df = show_only_shifts(df)
+    """Reformat dataframe for use with calendar applications"""
+    df = show_only_shifts_new(df)
     df["Start Date"] = [d.date() for d in df["Start DT"]]
     df["End Date"] = [d.date() for d in df["End DT"]]
     df["Start Time"] = [d.time() for d in df["Start DT"]]
@@ -210,4 +220,15 @@ def extract_and_organise():
             )
         )
     )
+    return df
+
+
+def hours_per_week(df):
+    df['Week Start'] = pd.to_datetime(df['Start Date']) - pd.to_timedelta(7, unit='d')
+    df = df.groupby([pd.Grouper(key='Week Start', freq='W-MON')])['Shift Length'] \
+        .sum() \
+        .reset_index() \
+        .sort_values('Week Start')
+    df = df.rename(columns={"Shift Length": "Hours"})
+    df["Hours"] = df["Hours"] / np.timedelta64(1, 'h')
     return df
